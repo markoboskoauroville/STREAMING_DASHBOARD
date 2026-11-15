@@ -11,7 +11,7 @@
 import AppKit
 import SwiftUI
 
-let VERSION = 2
+let VERSION = 3
 let APP_NAME = "Streaming Dashboard (Mantra)"
 
 enum Ink {
@@ -142,14 +142,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.contentView = NSHostingView(rootView: Root(dash: dash))
         w.delegate = self
         w.center()
-        // the first time: on the MacBook Pro's own screen, never the BenQ (the BenQ is Marko's); later where he left it
-        if !UserDefaults.standard.bool(forKey: "placed"),
+        w.setFrameAutosaveName("StreamingDashboardMain")
+        // the first time: on the MacBook Pro's own screen, never the BenQ (the BenQ is Marko's); later where he left it.
+        // After the autosave name, which restores a saved frame: v1/v2 had saved one on the BenQ.
+        if !UserDefaults.standard.bool(forKey: "placedOnBuiltIn"),
            let built = NSScreen.screens.first(where: { $0.localizedName.localizedCaseInsensitiveContains("built-in") }) {
             let f = built.visibleFrame
             w.setFrameOrigin(NSPoint(x: f.midX - w.frame.width / 2, y: max(f.minY, f.maxY - w.frame.height - 40)))
-            UserDefaults.standard.set(true, forKey: "placed")
+            UserDefaults.standard.set(true, forKey: "placedOnBuiltIn")
         }
-        w.setFrameAutosaveName("StreamingDashboardMain")
         window = w
         enforceOneTitle(w)
         // opened in the background: never takes the focus from what Marko is doing
