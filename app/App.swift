@@ -4,14 +4,14 @@
 // what is the speed coming from my computer to the virtual machine? How many users are attached to our streams? What is
 // the speed for each user? And any other useful settings and features you find for this panel."
 //
-// The first screen: the chain PHONE · MAC · VM · SITE as four lights, ① START the Meditation Room test stream on the VM,
-// ② GO LIVE on the site as camera "VM Test", and five numbers with their sparklines. Everything else sits behind DETAILS,
+// The first screen: the chain PHONE · MAC · VM · SITE as four lights, 1 START the Meditation Room test stream on the VM,
+// 2 GO LIVE on the site as camera "VM Test", and five numbers with their sparklines. Everything else sits behind DETAILS,
 // as folders (name + one line), one open at a time. All data comes from the VM by ssh (Collector.swift); the app never
 // streams video itself.
 import AppKit
 import SwiftUI
 
-let VERSION = 1
+let VERSION = 2
 let APP_NAME = "Streaming Dashboard (Mantra)"
 
 enum Ink {
@@ -142,6 +142,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.contentView = NSHostingView(rootView: Root(dash: dash))
         w.delegate = self
         w.center()
+        // the first time: on the MacBook Pro's own screen, never the BenQ (the BenQ is Marko's); later where he left it
+        if !UserDefaults.standard.bool(forKey: "placed"),
+           let built = NSScreen.screens.first(where: { $0.localizedName.localizedCaseInsensitiveContains("built-in") }) {
+            let f = built.visibleFrame
+            w.setFrameOrigin(NSPoint(x: f.midX - w.frame.width / 2, y: max(f.minY, f.maxY - w.frame.height - 40)))
+            UserDefaults.standard.set(true, forKey: "placed")
+        }
         w.setFrameAutosaveName("StreamingDashboardMain")
         window = w
         enforceOneTitle(w)

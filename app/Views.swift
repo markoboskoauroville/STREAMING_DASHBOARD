@@ -1,4 +1,4 @@
-// Views.swift: the window. First screen: the chain lights, ① START, ② GO LIVE, five numbers. DETAILS opens the folders.
+// Views.swift: the window. First screen: the chain lights, 1 START, 2 GO LIVE, five numbers. DETAILS opens the folders.
 import AppKit
 import SwiftUI
 
@@ -129,7 +129,7 @@ struct Root: View {
     }
     var link: some View { Rectangle().fill(Ink.line).frame(height: 1).frame(minWidth: 24, maxWidth: 90).padding(.horizontal, 10).padding(.bottom, 16) }
 
-    // ------------------------------------------------------------ ① START  ② GO LIVE
+    // ------------------------------------------------------------ 1 START  2 GO LIVE
     var steps: some View {
         VStack(alignment: .leading, spacing: 14) {
             let busy = !dash.busy.isEmpty
@@ -236,7 +236,7 @@ struct Root: View {
                     Text("streams · viewers · the machine · devices · tools · events").font(.system(size: 12, design: .monospaced)).foregroundStyle(Ink.dim)
                 }
                 Spacer()
-                Text(dash.lastPoll.map { "updated " + Fmt.hm.string(from: $0) } ?? "").font(.system(size: 11, design: .monospaced)).foregroundStyle(Ink.dim)
+                Text(dash.lastPoll.map { "updated " + Fmt.hm.string(from: $0) + (dash.source.isEmpty ? "" : " · via " + dash.source) } ?? "").font(.system(size: 11, design: .monospaced)).foregroundStyle(Ink.dim)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             if detailsOpen {

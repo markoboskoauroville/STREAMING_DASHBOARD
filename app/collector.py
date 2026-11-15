@@ -168,10 +168,16 @@ def mrlinux():
     return {"installed": inst, "status": st}
 
 
+_TOK = None
+
+
 def site():
     pub = get("https://santoshi-band.pages.dev/api/live", timeout=8)
     out = {"live": pub.get("live"), "via": pub.get("via"), "since": pub.get("since"), "_error": pub.get("_error")}
-    tok = sh("sudo -n cat /etc/meditation-room-linux/site-token 2>/dev/null").strip()
+    global _TOK
+    if _TOK is None:                      # read once per process (the VM service keeps it; journal stays quiet)
+        _TOK = sh("sudo -n cat /etc/meditation-room-linux/site-token 2>/dev/null").strip()
+    tok = _TOK
     if tok:
         d = get("https://santoshi-band.pages.dev/api/live", timeout=8, data=json.dumps({"action": "status"}).encode(),
                 headers={"Authorization": "Bearer " + tok, "content-type": "application/json"})

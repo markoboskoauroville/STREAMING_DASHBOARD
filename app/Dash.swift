@@ -48,6 +48,7 @@ final class Dash: ObservableObject {
     @Published var vmOK: Bool? = nil
     @Published var vmError = ""
     @Published var lastPoll: Date? = nil
+    @Published var source = ""                               // "service" (VM :8996) or "ssh" (collector.py)
     // the Mac
     @Published var macOutBps: Double? = nil
     @Published var macInBps: Double? = nil
@@ -158,16 +159,27 @@ final class Dash: ObservableObject {
         let wantSite = Date().timeIntervalSince(lastSite) > 14
         let wantNdi = Date().timeIntervalSince(lastNdi) > 30
         DispatchQueue.global(qos: .utility).async {
-            let (s, out, err) = VM.run("python3 - " + (wantSite ? "site" : ""), input: self.collector, timeout: 25)
-            let snap = s == 0 ? (try? JSONSerialization.jsonObject(with: Data(out.utf8))) as? J : nil
+            // the VM's own service first (one source of truth, over Tailscale); ssh + collector.py only when it does not answer
+            var snap = Service.snapshot()
+            var s: Int32 = 0, err = ""
+            let via = snap != nil ? "service" : "ssh"
+            if snap == nil {
+                let r = VM.run("python3 - " + (wantSite ? "site" : ""), input: self.collector, timeout: 25)
+                s = r.0; err = r.2
+                snap = s == 0 ? (try? JSONSerialization.jsonObject(with: Data(r.1.utf8))) as? J : nil
+            }
             let mac = Mac.tailscaleCounters()
             let sim = Mac.sim()
             let ndi = wantNdi ? Mac.ndiSources() : nil
+            let snapshot = snap, status = s, error = err
             DispatchQueue.main.async {
+                let snap = snapshot, s = status, err = error
                 self.inflight = false
                 if wantSite { self.lastSite = Date() }
                 if let ndi { self.lastNdi = Date(); self.ndi = ndi }
                 self.applyMac(mac, sim)
+                if via != self.source && snap != nil { self.log(via == "service" ? "reading the VM's dashboard service (:8996)" : "the dashboard service does not answer: reading by ssh", via == "service" ? 0 : 1) }
+                if snap != nil { self.source = via }
                 if let snap { self.apply(snap) }
                 else {
                     if self.vmOK != false { self.log("the VM does not answer: " + (err.split(separator: "\n").last.map(String.init) ?? "ssh \(s)"), 2) }
@@ -385,7 +397,7 @@ final class Dash: ObservableObject {
     var goLiveRefusal: String? {
         if mrLive { return nil }
         if mrInstalled != true { return "the Meditation Room test stream is not installed on the VM" }
-        if !mrRunning { return "start the stream first (①)" }
+        if !mrRunning { return "start the stream first (1)" }
         if inNoon { return "11:50–13:50 Zagreb: the noon replay owns the site" }
         if siteLive { return "the site is already live" + (siteName.isEmpty ? "" : " (\(siteName))") }
         if streams.contains(where: { $0.relay == "SANTOSHI" && $0.path == "santoshi" && $0.ready }) { return "another publisher is on the santoshi path" }
@@ -393,13 +405,20 @@ final class Dash: ObservableObject {
     }
 
     // ------------------------------------------------------------ the buttons
+    /// through the VM's service (same rules there), by ssh + mrlinux only when the service does not answer
     private func action(_ title: String, _ cmd: String, timeout: Double = 40, then: ((Int32, String) -> Void)? = nil) {
         guard busy.isEmpty else { return }
         busy = title; note = ""
         log(title.lowercased() + "…")
         DispatchQueue.global(qos: .userInitiated).async {
-            let (s, out, err) = VM.run(cmd, timeout: timeout)
-            let text = (out + err).trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = cmd.split(separator: " ").map(String.init)      // "mrlinux go-live 15"
+            let s: Int32, text: String
+            if parts.count >= 2, let r = Service.action(parts[1], minutes: parts.count > 2 ? Int(parts[2]) ?? 5 : 5) {
+                s = r.0 ? 0 : 1; text = r.1
+            } else {
+                let r = VM.run(cmd, timeout: timeout)
+                s = r.0; text = (r.1 + r.2).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
             DispatchQueue.main.async {
                 self.busy = ""
                 let last = text.split(separator: "\n").last.map(String.init) ?? ""
@@ -576,4 +595,49 @@ enum Fmt {
     }
     static func since(_ d: Date?) -> String { d.map { dur(Date().timeIntervalSince($0)) } ?? "—" }
     static let hm: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f }()
+}
+
+// ---------------------------------------------------------------- the VM's dashboard service (vm/, Tailscale :8996)
+enum Service {
+    static var base: String { "http://\(VM.tailscale):8996" }
+    private static var token: String?                       // read once over ssh, kept only in memory, never shown
+
+    static func snapshot() -> J? {
+        guard let r = http("GET", "/api/snapshot", nil, timeout: 6), r.0 == 200,
+              let j = (try? JSONSerialization.jsonObject(with: r.1)) as? J, j["machine"] != nil,
+              let served = num(j["served_at"]), let t = num(j["t"]), served - t < 30 else { return nil }   // stale = not trusted
+        return j
+    }
+
+    /// (ok, note) or nil when the service does not answer (then the caller uses ssh)
+    static func action(_ action: String, minutes: Int) -> (Bool, String)? {
+        if token == nil {
+            let (s, out, _) = VM.run("cat ~/.config/streaming-dashboard/token 2>/dev/null", timeout: 15)
+            let t = out.trimmingCharacters(in: .whitespacesAndNewlines)
+            if s == 0 && !t.isEmpty { token = t }
+        }
+        let body = try? JSONSerialization.data(withJSONObject: ["action": action, "minutes": minutes])
+        guard let r = http("POST", "/api/action", body, timeout: 95) else { return nil }
+        let code = r.0, data = r.1
+        if code == 403 { token = nil; return (false, "the service refused the token") }
+        let j = (try? JSONSerialization.jsonObject(with: data)) as? J ?? [:]
+        let note = str(j["note"]).isEmpty ? str(j["error"]) : str(j["note"])
+        return ((j["ok"] as? Bool) == true, note.isEmpty ? "HTTP \(code)" : note)
+    }
+
+    private static func http(_ method: String, _ path: String, _ body: Data?, timeout: Double) -> (Int, Data)? {
+        guard let u = URL(string: base + path) else { return nil }
+        var req = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
+        req.httpMethod = method
+        if let body { req.httpBody = body; req.setValue("application/json", forHTTPHeaderField: "content-type") }
+        if let token { req.setValue(token, forHTTPHeaderField: "x-dash-token") }
+        var result: (Int, Data)?
+        let sem = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: req) { d, r, _ in
+            if let h = r as? HTTPURLResponse { result = (h.statusCode, d ?? Data()) }
+            sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + timeout + 2)
+        return result
+    }
 }
