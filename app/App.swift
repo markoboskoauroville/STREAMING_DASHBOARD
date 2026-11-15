@@ -11,7 +11,7 @@
 import AppKit
 import SwiftUI
 
-let VERSION = 5
+let VERSION = 6
 let APP_NAME = "Streaming Dashboard (Mantra)"
 
 enum Ink {
@@ -143,19 +143,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.delegate = self
         w.center()
         w.setFrameAutosaveName("StreamingDashboardMain")
-        // the first time: on the MacBook Pro's own screen, never the BenQ (the BenQ is Marko's); later where he left it.
-        // After the autosave name, which restores a saved frame: v1/v2 had saved one on the BenQ.
-        if !UserDefaults.standard.bool(forKey: "placedOnBuiltIn"),
-           let built = NSScreen.screens.first(where: { $0.localizedName.localizedCaseInsensitiveContains("built-in") }) {
-            let f = built.visibleFrame
-            w.setFrameOrigin(NSPoint(x: f.midX - w.frame.width / 2, y: max(f.minY, f.maxY - w.frame.height - 40)))
-            UserDefaults.standard.set(true, forKey: "placedOnBuiltIn")
-        }
         window = w
         enforceOneTitle(w)
         // opened in the background: never takes the focus from what Marko is doing
         if CommandLine.arguments.contains("--background") { w.orderBack(nil) } else { w.makeKeyAndOrderFront(nil) }
         DispatchQueue.main.async { self.enforceOneTitle(w) }
+        // the first time: on the MacBook Pro's own screen, never the BenQ (the BenQ is Marko's); later where he left it.
+        // Done after the window is on screen (set before, AppKit put it back on the saved BenQ frame: v3/v4).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            guard !UserDefaults.standard.bool(forKey: "placedOnBuiltIn2"),
+                  let built = NSScreen.screens.first(where: { $0.localizedName.localizedCaseInsensitiveContains("built-in") }) else { return }
+            let f = built.visibleFrame
+            w.setFrame(NSRect(x: f.midX - w.frame.width / 2, y: max(f.minY, f.maxY - w.frame.height - 40),
+                              width: w.frame.width, height: min(w.frame.height, f.height - 40)), display: true)
+            w.saveFrame(usingName: "StreamingDashboardMain")
+            UserDefaults.standard.set(true, forKey: "placedOnBuiltIn2")
+        }
     }
 
     /// ONE TITLE ONLY (Marko 15.11.2026: "don't repeat this bug"). The app draws its own title (TopRow); the system title
