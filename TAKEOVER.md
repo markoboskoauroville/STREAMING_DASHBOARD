@@ -1,7 +1,8 @@
 # TAKEOVER: Streaming Dashboard (Mantra)
 
 A Mac app (Swift, built only by GitHub Actions) with one window for the streams on the cloud machine chromium-vm.
-Started 15.11.2026 at Marko's word (momentaryupdates.md, request 1). This repository is public and unpromoted, so it has
+Started 15.11.2026 at Marko's word (momentaryupdates.md, request 1); the same dashboard on the VM's Linux desktop at
+request 2. Mac app v6 (15.11.2026), VM service v1. This repository is public and unpromoted, so it has
 no README: what it is lives here (MANTRA_MANIFEST modules/repo-privacy.md).
 
 ## What the window shows
@@ -22,11 +23,32 @@ no README: what it is lives here (MANTRA_MANIFEST modules/repo-privacy.md).
   this Mac by `~/.local/bin/ndimon list`) · TOOLS (TEST THE WHOLE CHAIN, copy the viewer / test / studio links) · EVENTS
   (what happened, newest first; also ~/Library/Logs/StreamingDashboard.log).
 
-## How the data comes
+## Two parts, one source of truth (request 2, 15.11.2026)
 
-- One poll = `ssh chromium-vm python3 - [site]` with app/collector.py on stdin (nothing installed on the VM), about 2 KB of
-  JSON back. Every 5 s while the window is visible, every 30 s when hidden; the site every 15 s. One shared ssh connection
-  (ControlMaster /tmp/sdash-<uid>-%C, 10 min).
+- **The VM service** (vm/streaming_dashboard_vm.py, systemd `streaming-dashboard.service`, user ubuntu, on at boot: it only
+  reads; vmctl core service SDASH). Every 5 s it runs the functions of app/collector.py (installed beside it), keeps the
+  rates, 120-point history and the events, and serves on **100.102.86.30:8996 and 127.0.0.1:8996 only**:
+  `GET /` the web page "Streaming Dashboard (Mantra)" (vm/web/index.html: the same chain, 1 START, 2 GO LIVE, numbers,
+  DETAILS folders; no NDI/SIM/Mac upload, those are Mac-only), `GET /api/snapshot` (raw, for the Mac app), `GET /api/state`
+  (the page's view), `GET /health`, `POST /api/action {"action": start|stop|go-live|stop-live, "minutes": 5|15|30}`.
+  Actions are allowed from the VM itself (its desktop browser) or with header `x-dash-token` = the token in
+  /home/ubuntu/.config/streaming-dashboard/token (600, made once by install.sh, never printed); go-live re-checks the
+  rules (noon window, site live, santoshi publisher) and mrlinux checks them again.
+- **On the VM's desktop**: the launcher "Streaming Dashboard (Mantra)" (~/.local/share/applications/streaming-dashboard.desktop)
+  opens http://127.0.0.1:8996/ in the session's Chrome as an app window. Any tailnet browser: http://100.102.86.30:8996/
+  (asks for the token once for the buttons).
+- **Install / update on the VM**: `cd ~/src/STREAMING_DASHBOARD && git pull && sudo vm/install.sh` (copies to
+  /usr/local/lib/streaming-dashboard, unit, token once, launcher, /etc/chromium-vm/services.json entry, restart, /health).
+  The entry is also in vm-chromium tools/vmctl/services.json.
+- **The Mac app** reads `/api/snapshot` over Tailscale (EVENTS says "reading the VM's dashboard service"; the DETAILS line
+  says "via service"), sends the buttons to `/api/action` with the token (read once over ssh, memory only), and falls back to
+  ssh + collector.py / mrlinux only when the service does not answer ("via ssh"). Mac-only parts: MAC → VM, SIM, NDI,
+  TEST THE WHOLE CHAIN.
+
+## How the data comes (the collector)
+
+- Fallback poll = `ssh chromium-vm python3 - [site]` with app/collector.py on stdin, about 2 KB of JSON back. Every 5 s while
+  the window is visible, every 30 s when hidden. One shared ssh connection (ControlMaster /tmp/sdash-<uid>-%C, 10 min).
 - The collector asks: MediaMTX santoshi relay API https://127.0.0.1:8443/v3 (127.0.0.1 has the api right), test relay
   http://127.0.0.1:9996/v3, `ss` on :1935 (studio ladder ingest bytes), studio-web /studio/health (viewers by rendition),
   cloud mixer http://127.0.0.1:8841/, systemctl states, /proc counters, mrlinux status.json, the site /api/live (public)
@@ -53,6 +75,8 @@ itself at start (app/Updater.swift, kits/mac-updater). First install on the Mac:
 
     gh release download --repo markoboskoauroville/STREAMING_DASHBOARD --pattern app.zip -D /tmp/sd --clobber
     ditto -x -k /tmp/sd/app.zip /Applications && codesign --force -s "Mantra Apps" "/Applications/Streaming Dashboard (Mantra).app"
-    open -g -a "Streaming Dashboard (Mantra)" --args --background
+    open -g "/Applications/Streaming Dashboard (Mantra).app" --args --background
+
+The first start puts the window on the MacBook Pro's own screen (never the BenQ); later it opens where it was left.
 
 Never swiftc / build.sh on the Mac (MANTRA_MANIFEST compile-on-github.md). Bundle id community.auroville.streamingdashboard.
