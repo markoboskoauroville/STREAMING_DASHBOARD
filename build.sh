@@ -26,7 +26,7 @@ cat > "$APP/Contents/Info.plist" <<PL
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSLocalNetworkUsageDescription</key><string>Streaming Dashboard (Mantra) reads the numbers of the streams from the cloud machine over Tailscale (100.102.86.30).</string>
-<key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/><key>NSAllowsLocalNetworking</key><true/></dict>
+<key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
 </dict></plist>
 PL

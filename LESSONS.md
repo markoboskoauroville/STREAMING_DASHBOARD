@@ -7,3 +7,6 @@
    (/v3 gives 404). The test relay (mrlinux) has its API on plain http 127.0.0.1:9996.
 3. **15.11.2026: nothing installed on the VM.** The collector travels with the app and goes over ssh on stdin at every poll,
    so a new version of the app never needs a VM deploy.
+4. **15.11.2026: plain http to 100.102.86.30 is blocked by App Transport Security (-1022)** in a Swift app (curl is not).
+   `NSAllowsArbitraryLoads` alone opens it; together with `NSAllowsLocalNetworking` the arbitrary-loads key is IGNORED and
+   a Tailscale address is not "local" (v4 still failed, v5 fixed). Error text now goes into EVENTS.
