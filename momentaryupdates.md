@@ -7,3 +7,10 @@ Every request saved word for word, first, before any code.
 > please start building the virtual machine. I want to have one window, one pane, like any other application, which we can call a streaming dashboard. From the streaming dashboard, I can start this meditation room to be streamed. I can see the statistics: what is the speed coming from my computer to the virtual machine? How many users are attached to our streams? What is the speed for each user? And any other useful settings and features you find for this panel. We call it the streaming dashboard. Please do be creative
 
 (Dictation: he said "individual machine" = virtual machine, the VM chromium-vm; logged in MANTRA_MANIFEST modules/dictation-corrections.md.)
+
+## Request 2 (15.11.2026): on the VM too
+
+> Streaming dashboard Mantra should also be available on the virtual machine Linux as well as on this machine. Understand.
+
+(Meaning: the same dashboard on chromium-vm's Linux desktop. Built as a stats service on the VM (vm/, Tailscale-only
+:8996, JSON + web page "Streaming Dashboard"), which the Mac app reads too: one source of truth.)
