@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streaming Dashboard (Mantra)</title>
+<!-- Streaming Dashboard (Mantra) on chromium-vm: the same window as the Mac app, from the VM's own service
+     (streaming_dashboard_vm.py, /api/state every 5 s). Simple first: the chain, 1 START, 2 GO LIVE, five numbers,
+     DETAILS as folders, one open at a time. -->
+<style>
+:root{--ground:#0B0B0D;--line:#2E2E33;--text:#ECECEC;--dim:#8E8E96;--green:#33D17A;--grey:#7A8087;--amber:#F0A030;--red:#E5484D;--gold:#D4AF37}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ground);color:var(--text);font:13px/1.35 ui-monospace,"DejaVu Sans Mono",Menlo,monospace}
+.top{display:flex;align-items:center;gap:14px;height:40px;padding:0 16px;border-bottom:1px solid var(--line)}
+.top .name{flex:1;text-align:center;font:15px system-ui,sans-serif}.top .name b{font-weight:700}
+.dim{color:var(--dim)}.lab{font-size:10px;font-weight:600;color:var(--dim);letter-spacing:.02em}
+section{border-bottom:1px solid var(--line)}
+.chain{display:flex;justify-content:center;align-items:flex-start;padding:14px 10px;gap:0;flex-wrap:wrap}
+.hop{text-align:center;min-width:110px}.hop b{font-size:13px}.hop .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.hop .w{font-size:10px;font-weight:600;margin-top:4px}
+.link{flex:0 1 80px;height:1px;background:var(--line);margin:8px 10px 0}
+.steps{padding:16px 22px;display:grid;gap:14px}
+.step{display:flex;align-items:center;gap:12px;cursor:pointer;background:none;border:0;color:inherit;font:inherit;padding:0;text-align:left}
+.step .n{width:30px;height:30px;border-radius:50%;border:1px solid currentColor;display:grid;place-items:center;font-weight:700;font-size:15px;transition:all .12s}
+.step .t{font-size:17px;font-weight:700}
+.step:hover:not([disabled]) .n{transform:scale(1.13);background:color-mix(in srgb,currentColor 18%,transparent);border-width:2px}
+.step:hover:not([disabled]) .t{text-decoration:underline}
+.step[disabled]{color:var(--grey)!important;cursor:default}
+.sub{margin:4px 0 0 46px;font-size:12px;color:var(--dim)}
+.nums{display:flex;flex-wrap:wrap;gap:14px 30px;padding:14px 22px}
+.cell .v{font-weight:700;font-size:13px;margin-top:3px}
+svg.spark{display:block;margin-top:4px}
+.det{padding:10px 16px;display:flex;gap:10px;align-items:baseline;cursor:pointer}
+.det b{font-size:14px}
+.folder{border-top:1px solid var(--line)}
+.fh{padding:8px 22px;display:flex;gap:12px;cursor:pointer}.fh b{white-space:nowrap}.fh.open b{color:var(--gold)}
+.fb{padding:4px 30px 14px;overflow-x:auto}
+table{border-collapse:collapse}th{font-size:10px;color:var(--dim);text-align:left;font-weight:600;padding:2px 18px 4px 0;white-space:nowrap}
+td{padding:2px 18px 2px 0;font-weight:600;font-size:12px;white-space:nowrap}
+.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}.off{color:var(--grey)}
+.grid{display:flex;flex-wrap:wrap;gap:12px 26px;margin-bottom:12px}
+.ev{font-size:12px}.ev span{color:var(--dim);margin-right:10px;font-size:11px}
+.btn{background:none;border:1px solid transparent;color:var(--text);font:inherit;font-weight:700;padding:3px 6px;border-radius:5px;cursor:pointer}
+.btn:hover{border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.12)}
+dialog{background:#141418;color:var(--text);border:1px solid var(--line);border-radius:8px;max-width:520px}
+dialog .btn{margin:6px 8px 0 0}
+@media (max-width:600px){.steps,.nums{padding-left:16px;padding-right:16px}.step .t{font-size:14px}.link{flex-basis:20px}}
+</style>
+</head>
+<body>
+<div class="top"><span class="ok">ON</span><span class="name"><b>Streaming Dashboard</b> (Mantra)</span><span class="dim" id="ver">v1 · VM</span></div>
+<section class="chain" id="chain"></section>
+<section class="steps">
+  <div><button class="step" id="s1"><span class="n">1</span><span class="t" id="s1t">START MEDITATION ROOM STREAM</span></button><div class="sub" id="s1s"></div></div>
+  <div><button class="step" id="s2"><span class="n">2</span><span class="t" id="s2t">GO LIVE ON THE SITE</span></button><div class="sub" id="s2s"></div></div>
+  <div class="sub" id="note" style="margin-left:0"></div>
+</section>
+<section class="nums" id="nums"></section>
+<section>
+  <div class="det" id="det" role="button" aria-label="Details"><b id="detw">▸ DETAILS</b><span class="dim" id="dett">streams · viewers · the machine · devices · events</span><span style="flex:1"></span><span class="dim" id="upd"></span></div>
+  <div id="folders" hidden></div>
+</section>
+<dialog id="dlg"><p id="dq"></p><p class="dim" id="dt"></p><div id="db"></div></dialog>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const bits = (b) => b == null ? "—" : b >= 1e6 ? (b / 1e6).toFixed(2) + " Mbit/s" : b >= 1e3 ? Math.round(b / 1e3) + " kbit/s" : Math.round(b) + " bit/s";
+const pct = (v) => v == null ? "—" : Math.round(v) + " %";
+const dur = (s) => { if (s == null) return "—"; s = Math.max(0, Math.floor(s)); return s >= 86400 ? `${Math.floor(s/86400)} d ${Math.floor(s%86400/3600)} h` : s >= 3600 ? `${Math.floor(s/3600)} h ${Math.floor(s%3600/60)} min` : s >= 60 ? `${Math.floor(s/60)} min ${s%60} s` : s + " s"; };
+const since = (t) => t ? dur(Date.now() / 1000 - t) : "—";
+const color = (h) => ({ok: "var(--green)", warn: "var(--amber)", bad: "var(--red)", off: "var(--grey)"})[h];
+const load = (v) => v == null ? "" : v > 90 ? "bad" : v > 70 ? "warn" : "ok";
+let S = null, open = false, folder = "";
+try { open = localStorage.getItem("sd.open") === "1"; folder = localStorage.getItem("sd.folder") || ""; } catch (e) {}
+
+function spark(vals, fmt) {
+  const w = 130, h = 22, v = vals || [];
+  const hi = Math.max(...v, 1e-9);
+  const pts = v.map((x, i) => `${(w * i / Math.max(1, v.length - 1)).toFixed(1)},${((h - 2) * (1 - x / hi) + 1).toFixed(1)}`).join(" ");
+  const tip = v.length ? `now ${fmt(v[v.length-1])} · low ${fmt(Math.min(...v))} · high ${fmt(hi)} · last ${v.length} polls` : "no data yet";
+  return `<svg class="spark" width="${w}" height="${h}"><title>${esc(tip)}</title><line x1="0" y1="${h-.5}" x2="${w}" y2="${h-.5}" stroke="var(--line)"/>` +
+    (v.length > 1 ? `<polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : "") + "</svg>";
+}
+
+function render() {
+  if (!S) return;
+  $("chain").innerHTML = (S.hops || []).map((h, i) => (i ? '<div class="link"></div>' : "") +
+    `<div class="hop" aria-label="${esc(h[0])}: ${esc(h[2])}"><b><span class="dot" style="background:${color(h[1])}"></span>${esc(h[0])}</b><div class="w" style="color:${h[1] === "off" ? "var(--dim)" : color(h[1])}">${esc(h[2])}</div></div>`).join("");
+  const mr = S.mr || {}, st = mr.status || {}, busy = (S.busy || {}).what;
+  const s1 = $("s1");
+  s1.disabled = !!busy || !mr.installed;
+  s1.style.color = mr.running ? "var(--amber)" : "var(--green)";
+  $("s1t").textContent = busy === "start" ? "STARTING…" : busy === "stop" ? "STOPPING…" : mr.running ? "STOP MEDITATION ROOM STREAM" : "START MEDITATION ROOM STREAM";
+  $("s1s").textContent = !mr.installed ? "not installed on the VM (MANTRA_ROOM/linux, mrlinux)" : !mr.running ? "the Meditation Room (Linux) test stream on the VM, private (Tailscale only)" :
+    [st.track, st.speed && "speed " + st.speed, st.fps && st.fps + " fps", st.bitrate, st.drop_frames != null && "dropped " + st.drop_frames].filter(Boolean).join(" · ");
+  const s2 = $("s2"), why = S.refusal;
+  s2.disabled = !!busy || (!mr.live && !!why);
+  s2.style.color = mr.live ? "var(--red)" : "var(--green)";
+  $("s2t").textContent = busy === "go-live" ? "GOING LIVE…" : busy === "stop-live" ? "STOPPING LIVE…" : mr.live ? "STOP LIVE ON THE SITE" : "GO LIVE ON THE SITE";
+  const w = (S.site || {}).viewers;
+  $("s2s").textContent = mr.live ? `VM Test is live on santoshi-band.pages.dev/live · ${w != null ? w + " watching" : "watching —"}` : why ? "not now: " + why : 'as camera "VM Test", 5 · 15 · 30 min, asks first';
+  $("s2s").style.color = !mr.live && why ? "var(--amber)" : "";
+  $("note").textContent = busy ? busy + "…" : (S.busy || {}).note || "";
+  const m = S.machine || {}, H = S.hist || {};
+  $("nums").innerHTML = [
+    ["INGEST ON THE VM", bits(S.ingest_bps), spark(H.ingest, bits)],
+    ["VIEWERS ON OUR STREAMS", `${S.audience ?? 0}${w != null ? " · SITE " + w + " WATCHING" : ""}`, spark(H.viewers, (x) => Math.round(x))],
+    ["VM CPU", `<span class="${load(m.cpu)}">${pct(m.cpu)}</span>`, spark(H.cpu, pct)],
+    ["VM NET OUT", bits(m.net_out != null ? m.net_out * 8 : null), spark(H.vmOut, bits)],
+    ["RAM FREE", `${pct(m.ram_free)} of ${Math.round(m.ram_gb || 0)} GB`, ""],
+  ].map(([l, v, s]) => `<div class="cell"><div class="lab">${l}</div><div class="v">${v}</div>${s}</div>`).join("");
+  $("upd").textContent = "updated " + new Date(S.t * 1000).toLocaleTimeString();
+  $("detw").textContent = (open ? "▾ " : "▸ ") + "DETAILS";
+  $("dett").hidden = open;
+  $("folders").hidden = !open;
+  if (open) folders();
+}
+
+function folders() {
+  const F = [
+    ["streams", "STREAMS", `${S.streams.filter((x) => x.ready).length} on · every path, who feeds it, speed in, readers`],
+    ["viewers", "VIEWERS", `${S.viewers.length} connected · protocol, where, speed for each`],
+    ["machine", "THE MACHINE", "chromium-vm · CPU, RAM, network, uptime, services, cloud mixer"],
+    ["devices", "DEVICES", "which device feeds which path"],
+    ["events", "EVENTS", `${(S.events || []).length} lines · what happened, newest first`],
+  ];
+  $("folders").innerHTML = F.map(([id, n, l]) => `<div class="folder"><div class="fh${folder === id ? " open" : ""}" data-f="${id}" role="button" aria-label="${n}"><b>${folder === id ? "▾" : "▸"} ${n}</b><span class="dim">${esc(l)}</span></div>${folder === id ? `<div class="fb">${body(id)}</div>` : ""}</div>`).join("");
+  document.querySelectorAll(".fh").forEach((e) => e.onclick = () => { folder = folder === e.dataset.f ? "" : e.dataset.f; try { localStorage.setItem("sd.folder", folder); } catch (x) {} render(); });
+}
+
+function table(head, rows) { return `<table><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table>`; }
+
+function body(id) {
+  if (id === "streams") return table(["RELAY", "PATH", "FED BY", "STATE", "IN", "READERS", "ON FOR", "PICTURE", "ERRORS"],
+    S.streams.map((x) => [`<span class="dim">${x.relay}</span>`, esc(x.path), esc(x.feeder), x.ready ? '<span class="ok">ON</span>' : '<span class="off">OFF</span>', bits(x.in_bps), x.readers, since(x.since), esc(x.picture || "—"), x.errors ? `<span class="warn">${x.errors}</span>` : 0]));
+  if (id === "viewers") return (S.viewers.length ? table(["STREAM", "PROTOCOL", "WHERE", "DEVICE", "SPEED", "LINK", "FOR"],
+    S.viewers.map((v) => [esc(v.stream), esc(v.proto), `<span class="dim">${esc(v.remote || "—")}</span>`, esc(v.device || "—"), bits(v.bps), `<span class="dim">${esc(v.note || "—")}</span>`, since(v.since)]))
+    : '<div class="dim">nobody is connected now</div>') + `<p class="dim" style="font-size:11px">site watching (the live room): ${(S.site || {}).viewers ?? "— (counted only while the site is live)"} · addresses cut to a.b.*.* · studio viewers counted by rendition, speed nominal</p>`;
+  if (id === "machine") {
+    const m = S.machine, mx = S.mixer || {};
+    return `<div class="grid">${[["CPU", `<span class="${load(m.cpu)}">${pct(m.cpu)}</span>`], ["RAM FREE", pct(m.ram_free)], ["LOAD", m.load ?? "—"], ["UP FOR", dur(m.up_s)], ["DISK FREE", (m.disk_free_gb ?? "—") + " GB"],
+      ["NET IN", bits(m.net_in != null ? m.net_in * 8 : null)], ["NET OUT", bits(m.net_out != null ? m.net_out * 8 : null)], ["TAILSCALE IN", bits(m.ts_in != null ? m.ts_in * 8 : null)]]
+      .map(([l, v]) => `<div class="cell"><div class="lab">${l}</div><div class="v">${v}</div></div>`).join("")}</div>` +
+      table(["SERVICE", "STATE"], Object.entries(S.services || {}).map(([k, v]) => [esc(k), `<span class="${v === "active" ? "ok" : v === "failed" ? "bad" : "off"}">${esc(v.toUpperCase())}</span>`])) +
+      `<div class="grid" style="margin-top:12px">${[["CLOUD MIXER PROGRAM", esc(mx.program || "—")], ["MIXER OUTPUT", mx.output ? '<span class="ok">ON</span>' : '<span class="off">OFF</span>'], ["LATE FRAMES", mx.late_frames ?? "—"], ["NEXT SHOW (TIMER)", esc(S.show_next || "—")]]
+      .map(([l, v]) => `<div class="cell"><div class="lab">${l}</div><div class="v">${v}</div></div>`).join("")}</div>` +
+      (mx.events || []).slice().reverse().map((e) => `<div class="dim" style="font-size:11px">${esc(e)}</div>`).join("");
+  }
+  if (id === "devices") {
+    const on = (f) => S.streams.some((x) => x.ready && f(x)) ? '<span class="ok">SENDING</span>' : '<span class="off">—</span>';
+    return table(["DEVICE", "FEEDS", "STATE"], [
+      ["Pixel / Sony (phone camera app)", "relay santoshi, or pixel → Cloud Mixer (WHIP)", on((x) => x.relay === "SANTOSHI" && (x.feeder.includes("WHIP") || x.path === "pixel"))],
+      ["MacBook Pro studio", "studio/master (RTMP over Tailscale) → ladder", on((x) => x.relay === "STUDIO")],
+      ["Cloud Mixer (VM)", "reads pixel, publishes santoshi (SRT)", on((x) => x.relay === "SANTOSHI" && x.feeder === "Cloud Mixer")],
+      ["VM Test (Meditation Room Linux)", "vmtest (private); santoshi while live", on((x) => x.relay === "TEST")]]) +
+      '<p class="dim" style="font-size:11px">NDI sources, the Mac upload and the SIM are shown in the Mac app.</p>';
+  }
+  return (S.events || []).map((e) => `<div class="ev ${e[2] === 2 ? "bad" : e[2] === 1 ? "warn" : ""}"><span>${e[0]}</span>${esc(e[1])}</div>`).join("") || '<div class="dim">nothing yet</div>';
+}
+
+async function poll() {
+  try { S = await (await fetch("/api/state", {cache: "no-store"})).json(); render(); }
+  catch (e) { $("upd").textContent = "the service does not answer"; }
+}
+
+function ask(q, t, buttons) {
+  return new Promise((res) => {
+    $("dq").textContent = q; $("dt").textContent = t;
+    $("db").innerHTML = buttons.map((b, i) => `<button class="btn" data-i="${i}">${esc(b)}</button>`).join("") + '<button class="btn" data-i="-1">Cancel</button>';
+    $("db").querySelectorAll("button").forEach((b) => b.onclick = () => { $("dlg").close(); res(+b.dataset.i); });
+    $("dlg").showModal();
+  });
+}
+
+async function act(action, minutes) {
+  const headers = {"content-type": "application/json"};
+  let tok = ""; try { tok = localStorage.getItem("sd.token") || ""; } catch (e) {}
+  if (tok) headers["x-dash-token"] = tok;
+  $("note").textContent = action + "…";
+  let r = await fetch("/api/action", {method: "POST", headers, body: JSON.stringify({action, minutes})});
+  if (r.status === 403) {
+    tok = prompt("This browser is not the VM's own: the dashboard token (~/.config/streaming-dashboard/token on the VM)") || "";
+    if (!tok) { $("note").textContent = "no token: nothing done"; return; }
+    try { localStorage.setItem("sd.token", tok); } catch (e) {}
+    headers["x-dash-token"] = tok;
+    r = await fetch("/api/action", {method: "POST", headers, body: JSON.stringify({action, minutes})});
+  }
+  const j = await r.json().catch(() => ({}));
+  $("note").textContent = j.note || (r.ok ? "done" : "failed");
+  poll();
+}
+
+$("s1").onclick = async () => {
+  if (!S) return;
+  if (S.mr.running) { if (await ask("Stop the Meditation Room test stream?", S.mr.live ? "VM Test is live on the site: stopping ends that too." : "The test stream on the VM stops.", ["Stop"]) === 0) act("stop"); }
+  else act("start");
+};
+$("s2").onclick = async () => {
+  if (!S) return;
+  if (S.mr.live) return act("stop-live");
+  const i = await ask('Go live on santoshi-band.pages.dev as camera "VM Test"?', "Everyone on the live page sees the Meditation Room test stream. It ends by itself after the minutes you choose (STOP LIVE ends it sooner).", ["Go live 5 min", "Go live 15 min", "Go live 30 min"]);
+  if (i >= 0) act("go-live", [5, 15, 30][i]);
+};
+$("det").onclick = () => { open = !open; try { localStorage.setItem("sd.open", open ? "1" : "0"); } catch (e) {} render(); };
+poll(); setInterval(poll, 5000);
+</script>
+</body>
+</html>

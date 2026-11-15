@@ -1,0 +1,14 @@
+[Unit]
+Description=Streaming Dashboard (Mantra): the streams' numbers and the Meditation Room test stream buttons, Tailscale 100.102.86.30:8996 + 127.0.0.1:8996 (read-only but for mrlinux start/stop/go-live/stop-live)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+ExecStart=/usr/bin/python3 /usr/local/lib/streaming-dashboard/streaming_dashboard_vm.py
+Restart=always
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

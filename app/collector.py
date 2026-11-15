@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """collector.py: ONE snapshot of the streaming machine, as compact JSON on stdout.
 
-Streaming Dashboard (Mantra) sends this file over ssh at every poll (`ssh chromium-vm python3 - [site]`); nothing is
-installed on the VM. Read-only: it only asks the services that already run there.
+Two users, one file: the VM service vm/streaming_dashboard_vm.py imports it (installed beside it by vm/install.sh), and
+the Mac app sends it over ssh (`ssh chromium-vm python3 - [site]`) when the service does not answer. Read-only: it only
+asks the services that already run there.
 
   the VM itself        uptime, load, CPU and RAM counters, bytes in/out of every interface (the Mac makes rates from them)
   santoshi relay       MediaMTX API https://127.0.0.1:8443 (127.0.0.1 may read it): paths, WHEP/WHIP sessions, SRT, HLS
@@ -192,4 +193,5 @@ def main():
     sys.stdout.write(json.dumps(snap, separators=(",", ":")))
 
 
-main()
+if __name__ == "__main__":
+    main()

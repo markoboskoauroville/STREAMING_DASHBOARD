@@ -5,6 +5,7 @@ name: build
 on:
   push:
     branches: [main]
+    paths-ignore: ["vm/**", "**.md"]
   workflow_dispatch:
 permissions:
   contents: write
