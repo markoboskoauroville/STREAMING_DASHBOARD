@@ -178,7 +178,7 @@ final class Dash: ObservableObject {
                 if wantSite { self.lastSite = Date() }
                 if let ndi { self.lastNdi = Date(); self.ndi = ndi }
                 self.applyMac(mac, sim)
-                if via != self.source && snap != nil { self.log(via == "service" ? "reading the VM's dashboard service (:8996)" : "the dashboard service does not answer: reading by ssh", via == "service" ? 0 : 1) }
+                if via != self.source && snap != nil { self.log(via == "service" ? "reading the VM's dashboard service (:8996)" : "the dashboard service does not answer (" + Service.lastError + "): reading by ssh", via == "service" ? 0 : 1) }
                 if snap != nil { self.source = via }
                 if let snap { self.apply(snap) }
                 else {
@@ -600,7 +600,8 @@ enum Fmt {
 // ---------------------------------------------------------------- the VM's dashboard service (vm/, Tailscale :8996)
 enum Service {
     static var base: String { "http://\(VM.tailscale):8996" }
-    private static var token: String?                       // read once over ssh, kept only in memory, never shown
+    private static var token: String?
+    static var lastError = ""                       // read once over ssh, kept only in memory, never shown
 
     static func snapshot() -> J? {
         guard let r = http("GET", "/api/snapshot", nil, timeout: 6), r.0 == 200,
@@ -633,8 +634,9 @@ enum Service {
         if let token { req.setValue(token, forHTTPHeaderField: "x-dash-token") }
         var result: (Int, Data)?
         let sem = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: req) { d, r, _ in
+        URLSession.shared.dataTask(with: req) { d, r, e in
             if let h = r as? HTTPURLResponse { result = (h.statusCode, d ?? Data()) }
+            lastError = e.map { ($0 as NSError).domain + " \(($0 as NSError).code): " + $0.localizedDescription } ?? (r == nil ? "no answer" : "")
             sem.signal()
         }.resume()
         _ = sem.wait(timeout: .now() + timeout + 2)

@@ -11,7 +11,7 @@
 import AppKit
 import SwiftUI
 
-let VERSION = 3
+let VERSION = 4
 let APP_NAME = "Streaming Dashboard (Mantra)"
 
 enum Ink {
