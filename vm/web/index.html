@@ -98,7 +98,7 @@ function render() {
   s2.style.color = mr.live ? "var(--red)" : "var(--green)";
   $("s2t").textContent = busy === "go-live" ? "GOING LIVE…" : busy === "stop-live" ? "STOPPING LIVE…" : mr.live ? "STOP LIVE ON THE SITE" : "GO LIVE ON THE SITE";
   const w = (S.site || {}).viewers;
-  $("s2s").textContent = mr.live ? `VM Test is live on santoshi-band.pages.dev/live · ${w != null ? w + " watching" : "watching —"}` : why ? "not now: " + why : 'as camera "VM Test", 5 · 15 · 30 min, asks first';
+  $("s2s").textContent = mr.live ? `VM Test is live on santoshi.markobosko.org/live · ${w != null ? w + " watching" : "watching —"}` : why ? "not now: " + why : 'as camera "VM Test", 5 · 15 · 30 min, asks first';
   $("s2s").style.color = !mr.live && why ? "var(--amber)" : "";
   $("note").textContent = busy ? busy + "…" : (S.busy || {}).note || "";
   const m = S.machine || {}, H = S.hist || {};
@@ -198,7 +198,7 @@ $("s1").onclick = async () => {
 $("s2").onclick = async () => {
   if (!S) return;
   if (S.mr.live) return act("stop-live");
-  const i = await ask('Go live on santoshi-band.pages.dev as camera "VM Test"?', "Everyone on the live page sees the Meditation Room test stream. It ends by itself after the minutes you choose (STOP LIVE ends it sooner).", ["Go live 5 min", "Go live 15 min", "Go live 30 min"]);
+  const i = await ask('Go live on santoshi.markobosko.org as camera "VM Test"?', "Everyone on the live page sees the Meditation Room test stream. It ends by itself after the minutes you choose (STOP LIVE ends it sooner).", ["Go live 5 min", "Go live 15 min", "Go live 30 min"]);
   if (i >= 0) act("go-live", [5, 15, 30][i]);
 };
 $("det").onclick = () => { open = !open; try { localStorage.setItem("sd.open", open ? "1" : "0"); } catch (e) {} render(); };
